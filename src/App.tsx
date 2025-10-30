@@ -81,7 +81,14 @@ export default function App() {
   const [manualResult, setManualResult] = useState(null);
   const [uiMode, setUiMode] = useState('tabs');
 
-  useEffect(() => { const handleKeys = e => { if (e.key.toLowerCase() === 'r') { randomizeGroups(); runTournament(); } if (e.key.toLowerCase() === 's') runTournament(); }; window.addEventListener('keydown', handleKeys); return () => window.removeEventListener('keydown', handleKeys); }, [groups, goalEnv, homeAdv]);
+  useEffect(() => {
+    const handleKeys = e => {
+      if (e.key.toLowerCase() === 'r') { randomizeGroups(); runTournament(); }
+      if (e.key.toLowerCase() === 's') runTournament();
+    };
+    window.addEventListener('keydown', handleKeys);
+    return () => window.removeEventListener('keydown', handleKeys);
+  }, [groups, goalEnv, homeAdv, randomizeGroups, runTournament]);
 
   const teamMap = useMemo(() => Object.fromEntries(teams.map(t => [t.name, t])), [teams]);
 
@@ -105,44 +112,177 @@ export default function App() {
   function runTournament() {
     if (Object.keys(groups).length !== 8) return;
     for (const g of Object.keys(groups)) { if ((groups[g] || []).length !== 4) return; }
-    const all = []; let week = 1; const standings = {}; const gkSaves = {};
+
+    const all = [];
+    let week = 1;
+    const standings = {};
+    const gkSaves = {};
+
+    const teamOfRoundLocal = {};
+    const playerOfWeekLocal = {};
+
     for (const g of Object.keys(groups)) {
-      const gt = groups[g]; const sched = groupSchedule(gt); standings[g] = Object.fromEntries(gt.map(t => [t, { pts: 0, gf: 0, ga: 0, gd: 0 }]));
+      const gt = groups[g];
+      const sched = groupSchedule(gt);
+      standings[g] = Object.fromEntries(gt.map(t => [t, { pts: 0, gf: 0, ga: 0, gd: 0 }]));
+
       for (let w = 0; w < sched.length; w++) {
-        const roundTag = `Group ${g} — Week ${w + 1}`; const roundRatings = []; let best = null;
+        const roundTag = `Group ${g} — Week ${w + 1}`;
+        const roundRatings = [];
+        let best = null;
+
         for (const p of sched[w]) {
           const A = teamMap[p.home], B = teamMap[p.away]; if (!A || !B) continue;
           const [gA, gB] = simulateScore(A, B, goalEnv, homeAdv);
           const sA = starLine(A, gA), sB = starLine(B, gB);
           const savA = keeperSaves(gB), savB = keeperSaves(gA);
-          gkSaves[A.goalie.name] = (gkSaves[A.goalie.name] || 0) + savA; gkSaves[B.goalie.name] = (gkSaves[B.goalie.name] || 0) + savB;
-          const recA = standings[g][A.name], recB = standings[g][B.name]; recA.gf += gA; recA.ga += gB; recA.gd = recA.gf - recA.ga; recB.gf += gB; recB.ga += gA; recB.gd = recB.gf - recB.ga; if (gA > gB) recA.pts += 3; else if (gB > gA) recB.pts += 3; else { recA.pts++; recB.pts++; }
+          gkSaves[A.goalie.name] = (gkSaves[A.goalie.name] || 0) + savA;
+          gkSaves[B.goalie.name] = (gkSaves[B.goalie.name] || 0) + savB;
+
+          const recA = standings[g][A.name], recB = standings[g][B.name];
+          recA.gf += gA; recA.ga += gB; recA.gd = recA.gf - recA.ga;
+          recB.gf += gB; recB.ga += gA; recB.gd = recB.gf - recB.ga;
+          if (gA > gB) recA.pts += 3; else if (gB > gA) recB.pts += 3; else { recA.pts++; recB.pts++; }
+
           const summary = makeSummary(A, B, gA, gB, undefined, [`${sA.who} ${sA.goals}G/${sA.assists}A`, `${sB.who} ${sB.goals}G/${sB.assists}A`]);
-          all.push({ id: `G-${g}-${w}-${A.name}-${B.name}`, round: `Group ${g}`, week, home: A.name, away: B.name, homeGoals: gA, awayGoals: gB, summary, starInvolvement: { [sA.who]: { goals: sA.goals, assists: sA.assists, rating: sA.rating, team: A.name }, [sB.who]: { goals: sB.goals, assists: sB.assists, rating: sB.rating, team: B.name } } });
-          for (const pr of [{ player: sA.who, rating: sA.rating, team: A.name }, { player: sB.who, rating: sB.rating, team: B.name }]) { if (!best || pr.rating > best.rating) best = pr; }
-          roundRatings.push({ player: sA.who, rating: sA.rating, team: A.name }); roundRatings.push({ player: sB.who, rating: sB.rating, team: B.name });
+
+          all.push({
+            id: `G-${g}-${w}-${A.name}-${B.name}`,
+            round: `Group ${g}`,
+            week,
+            home: A.name, away: B.name, homeGoals: gA, awayGoals: gB,
+            summary,
+            starInvolvement: {
+              [sA.who]: { goals: sA.goals, assists: sA.assists, rating: sA.rating, team: A.name },
+              [sB.who]: { goals: sB.goals, assists: sB.assists, rating: sB.rating, team: B.name }
+            }
+          });
+
+          for (const pr of [{ player: sA.who, rating: sA.rating, team: A.name }, { player: sB.who, rating: sB.rating, team: B.name }]) {
+            if (!best || pr.rating > best.rating) best = pr;
+          }
+          roundRatings.push({ player: sA.who, rating: sA.rating, team: A.name });
+          roundRatings.push({ player: sB.who, rating: sB.rating, team: B.name });
+
           week++;
         }
-        roundRatings.sort((x, y) => y.rating - x.rating); setTeamOfRound(prev => ({ ...prev, [roundTag]: roundRatings.slice(0, 11) })); if (best) setPlayerOfWeek(prev => ({ ...prev, [week - 1]: best }));
+
+        roundRatings.sort((x, y) => y.rating - x.rating);
+        teamOfRoundLocal[roundTag] = roundRatings.slice(0, 11);
+        if (best) { const wkIdx = week - 1; playerOfWeekLocal[wkIdx] = best; }
       }
     }
-    function rankGroup(g) { const arr = Object.entries(standings[g]); arr.sort((a, b) => b[1].pts - a[1].pts || b[1].gd - a[1].gd || b[1].gf - a[1].gf || (Math.random() < 0.5 ? -1 : 1)); return arr.map(x => x[0]); }
-    const order = Object.keys(groups).sort(); const ranks = {}; for (const g of order) ranks[g] = rankGroup(g);
-    const r16Pairs = []; for (let i = 0; i < 8; i += 2) { const g1 = order[i], g2 = order[i + 1]; r16Pairs.push([ranks[g1][0], ranks[g2][1]], [ranks[g2][0], ranks[g1][1]]); }
-    const r16Ties = []; const winnersR16 = r16Pairs.map(([a, b]) => { const t = twoLeg(all, teamMap[a], teamMap[b], 'Round of 16'); r16Ties.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner }); return t.winner; });
-    const qfPool = shuffle(winnersR16); const qfPairs = []; for (let i = 0; i < 8; i += 2) qfPairs.push([qfPool[i], qfPool[i + 1]]);
-    const qfTies = []; const winnersQF = qfPairs.map(([a, b]) => { const t = twoLeg(all, teamMap[a], teamMap[b], 'Quarterfinals'); qfTies.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner }); return t.winner; });
-    const sfPool = shuffle(winnersQF); const sfPairs = [[sfPool[0], sfPool[1]], [sfPool[2], sfPool[3]]]; const sfTies = []; const winnersSF = sfPairs.map(([a, b]) => { const t = twoLeg(all, teamMap[a], teamMap[b], 'Semifinals'); sfTies.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner }); return t.winner; });
-    const [fa, fb] = winnersSF; const A = teamMap[fa], B = teamMap[fb]; const [gA, gB] = simulateScore(A, B, goalEnv, 0); const sA = starLine(A, gA), sB = starLine(B, gB); const savA = keeperSaves(gB), savB = keeperSaves(gA); const allGk = {}; allGk[A.goalie.name] = savA; allGk[B.goalie.name] = savB; const finalSummary = makeSummary(A, B, gA, gB, undefined, [`${sA.who} ${sA.goals}G/${sA.assists}A`, `${sB.who} ${sB.goals}G/${sB.assists}A`]); all.push({ id: `Final-${A.name}-${B.name}`, round: 'Final', week, home: A.name, away: B.name, homeGoals: gA, awayGoals: gB, summary: finalSummary, starInvolvement: { [sA.who]: { goals: sA.goals, assists: sA.assists, rating: sA.rating, team: A.name }, [sB.who]: { goals: sB.goals, assists: sB.assists, rating: sB.rating, team: B.name } } });
+
+    function rankGroup(g) {
+      const arr = Object.entries(standings[g]);
+      arr.sort((a, b) =>
+        b[1].pts - a[1].pts ||
+        b[1].gd - a[1].gd ||
+        b[1].gf - a[1].gf ||
+        (Math.random() < 0.5 ? -1 : 1)
+      );
+      return arr.map(x => x[0]);
+    }
+
+    const order = Object.keys(groups).sort();
+    const ranks = {};
+    for (const g of order) ranks[g] = rankGroup(g);
+
+    const r16Pairs = [];
+    for (let i = 0; i < 8; i += 2) {
+      const g1 = order[i], g2 = order[i + 1];
+      r16Pairs.push([ranks[g1][0], ranks[g2][1]], [ranks[g2][0], ranks[g1][1]]);
+    }
+
+    const r16Ties = [];
+    const winnersR16 = r16Pairs.map(([a, b]) => {
+      const t = twoLeg(all, teamMap[a], teamMap[b], 'Round of 16');
+      r16Ties.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner });
+      return t.winner;
+    });
+
+    const qfPool = shuffle(winnersR16);
+    const qfPairs = [];
+    for (let i = 0; i < 8; i += 2) qfPairs.push([qfPool[i], qfPool[i + 1]]);
+
+    const qfTies = [];
+    const winnersQF = qfPairs.map(([a, b]) => {
+      const t = twoLeg(all, teamMap[a], teamMap[b], 'Quarterfinals');
+      qfTies.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner });
+      return t.winner;
+    });
+
+    const sfPool = shuffle(winnersQF);
+    const sfPairs = [[sfPool[0], sfPool[1]], [sfPool[2], sfPool[3]]];
+    const sfTies = [];
+    const winnersSF = sfPairs.map(([a, b]) => {
+      const t = twoLeg(all, teamMap[a], teamMap[b], 'Semifinals');
+      sfTies.push({ a, b, aggA: t.aggA, aggB: t.aggB, winner: t.winner });
+      return t.winner;
+    });
+
+    const [fa, fb] = winnersSF;
+    const A = teamMap[fa], B = teamMap[fb];
+    const [gA, gB] = simulateScore(A, B, goalEnv, 0);
+    const sA = starLine(A, gA), sB = starLine(B, gB);
+    const savA = keeperSaves(gB), savB = keeperSaves(gA);
+    const finalSummary = makeSummary(A, B, gA, gB, undefined, [
+      `${sA.who} ${sA.goals}G/${sA.assists}A`,
+      `${sB.who} ${sB.goals}G/${sB.assists}A`
+    ]);
     const finalTie = { a: A.name, b: B.name, aggA: gA, aggB: gB, winner: gA === gB ? (Math.random() < 0.5 ? A.name : B.name) : (gA > gB ? A.name : B.name) };
-    setMatches(all); setBracket({ r16: r16Ties, qf: qfTies, sf: sfTies, final: [finalTie] });
-    const stats = {}; for (const m of all) { for (const [p, s] of Object.entries(m.starInvolvement)) { if (!stats[p]) stats[p] = { team: s.team, matches: 0, goals: 0, assists: 0, ratingSum: 0, Saves: 0 }; const t = stats[p]; t.team = s.team; t.matches++; t.goals += s.goals; t.assists += s.assists; t.ratingSum += s.rating; } }
-    const leadersList = Object.entries(stats).map(([Player, v]) => ({ Player, Team: v.team, Matches: v.matches, Goals: v.goals, Assists: v.assists, Avg: +(v.ratingSum / v.matches).toFixed(2), Saves: v.Saves }));
+
+    all.push({
+      id: `Final-${A.name}-${B.name}`,
+      round: 'Final',
+      week,
+      home: A.name, away: B.name, homeGoals: gA, awayGoals: gB,
+      summary: finalSummary,
+      starInvolvement: {
+        [sA.who]: { goals: sA.goals, assists: sA.assists, rating: sA.rating, team: A.name },
+        [sB.who]: { goals: sB.goals, assists: sB.assists, rating: sB.rating, team: B.name }
+      }
+    });
+
+    setMatches(all);
+    setBracket({ r16: r16Ties, qf: qfTies, sf: sfTies, final: [finalTie] });
+    setTeamOfRound(teamOfRoundLocal);
+    setPlayerOfWeek(playerOfWeekLocal);
+
+    const stats = {};
+    for (const m of all) {
+      for (const [p, s] of Object.entries(m.starInvolvement)) {
+        if (!stats[p]) stats[p] = { team: s.team, matches: 0, goals: 0, assists: 0, ratingSum: 0, Saves: 0 };
+        const t = stats[p];
+        t.team = s.team;
+        t.matches++;
+        t.goals += s.goals;
+        t.assists += s.assists;
+        t.ratingSum += s.rating;
+      }
+    }
+    const leadersList = Object.entries(stats).map(([Player, v]) => ({
+      Player, Team: v.team, Matches: v.matches, Goals: v.goals, Assists: v.assists, Avg: +(v.ratingSum / v.matches).toFixed(2), Saves: v.Saves
+    }));
     leadersList.sort((a, b) => b.Avg - a.Avg || b.Goals - a.Goals);
     setLeaders(leadersList);
   }
 
-  function twoLeg(all, A, B, roundName) { const [l1A, l1B] = simulateScore(A, B, goalEnv, homeAdv); const s1A = starLine(A, l1A), s1B = starLine(B, l1B); const sum1 = makeSummary(A, B, l1A, l1B, 1, [`${s1A.who} ${s1A.goals}G/${s1A.assists}A`, `${s1B.who} ${s1B.goals}G/${s1B.assists}A`]); all.push({ id: `${roundName}-${A.name}-${B.name}-L1`, round: roundName, leg: 1, week: 0, home: A.name, away: B.name, homeGoals: l1A, awayGoals: l1B, summary: sum1, starInvolvement: { [s1A.who]: { goals: s1A.goals, assists: s1A.assists, rating: s1A.rating, team: A.name }, [s1B.who]: { goals: s1B.goals, assists: s1B.assists, rating: s1B.rating, team: B.name } } }); const [l2A, l2B] = simulateScore(B, A, goalEnv, homeAdv); const s2A = starLine(B, l2A), s2B = starLine(A, l2B); const sum2 = makeSummary(B, A, l2A, l2B, 2, [`${s2A.who} ${s2A.goals}G/${s2A.assists}A`, `${s2B.who} ${s2B.goals}G/${s2B.assists}A`]); all.push({ id: `${roundName}-${A.name}-${B.name}-L2`, round: roundName, leg: 2, week: 0, home: B.name, away: A.name, homeGoals: l2A, awayGoals: l2B, summary: sum2, starInvolvement: { [s2A.who]: { goals: s2A.goals, assists: s2A.assists, rating: s2A.rating, team: B.name }, [s2B.who]: { goals: s2B.goals, assists: s2B.assists, rating: s2B.rating, team: A.name } } }); const aggA = l1A + l2B, aggB = l1B + l2A; const winner = aggA === aggB ? (Math.random() < 0.5 ? A.name : B.name) : (aggA > aggB ? A.name : B.name); return { winner, aggA, aggB }; }
+  function twoLeg(all, A, B, roundName) {
+    const [l1A, l1B] = simulateScore(A, B, goalEnv, homeAdv);
+    const s1A = starLine(A, l1A), s1B = starLine(B, l1B);
+    const sum1 = makeSummary(A, B, l1A, l1B, 1, [`${s1A.who} ${s1A.goals}G/${s1A.assists}A`, `${s1B.who} ${s1B.goals}G/${s1B.assists}A`]);
+    all.push({ id: `${roundName}-${A.name}-${B.name}-L1`, round: roundName, leg: 1, week: 0, home: A.name, away: B.name, homeGoals: l1A, awayGoals: l1B, summary: sum1, starInvolvement: { [s1A.who]: { goals: s1A.goals, assists: s1A.assists, rating: s1A.rating, team: A.name }, [s1B.who]: { goals: s1B.goals, assists: s1B.assists, rating: s1B.rating, team: B.name } } });
+
+    const [l2A, l2B] = simulateScore(B, A, goalEnv, homeAdv);
+    const s2A = starLine(B, l2A), s2B = starLine(A, l2B);
+    const sum2 = makeSummary(B, A, l2A, l2B, 2, [`${s2A.who} ${s2A.goals}G/${s2A.assists}A`, `${s2B.who} ${s2B.goals}G/${s2B.assists}A`]);
+    all.push({ id: `${roundName}-${A.name}-${B.name}-L2`, round: roundName, leg: 2, week: 0, home: B.name, away: A.name, homeGoals: l2A, awayGoals: l2B, summary: sum2, starInvolvement: { [s2A.who]: { goals: s2A.goals, assists: s2A.assists, rating: s2A.rating, team: B.name }, [s2B.who]: { goals: s2B.goals, assists: s2B.assists, rating: s2B.rating, team: A.name } } });
+
+    const aggA = l1A + l2B, aggB = l1B + l2A;
+    const winner = aggA === aggB ? (Math.random() < 0.5 ? A.name : B.name) : (aggA > aggB ? A.name : B.name);
+    return { winner, aggA, aggB };
+  }
 
   function shuffle(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
@@ -158,8 +298,8 @@ export default function App() {
   return (
     <div style={appStyles}>
       <header style={{ textAlign: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 30, fontWeight: 900, color: THEME.accent }}>ALL‑TIME CLUB SIMULATOR</div>
-        <div style={{ fontSize: 12, color: THEME.sub }}>R to re‑roll • S to sim • Randomized by design</div>
+        <div style={{ fontSize: 30, fontWeight: 900, color: THEME.accent }}>ALL-TIME CLUB SIMULATOR</div>
+        <div style={{ fontSize: 12, color: THEME.sub }}>R to re-roll • S to sim • Randomized by design</div>
       </header>
 
       <section style={{ ...card, marginBottom: 12 }}>
@@ -177,7 +317,7 @@ export default function App() {
             <input type="range" min={0} max={0.3} step={0.05} value={homeAdv} onChange={e=>setHomeAdv(parseFloat(e.target.value))} style={{ width: '100%' }} />
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button onClick={() => { randomizeGroups(); runTournament(); }} style={btnGhost}>Quick Re‑Sim</button>
+            <button onClick={() => { randomizeGroups(); runTournament(); }} style={btnGhost}>Quick Re-Sim</button>
             <button onClick={randomizeGroups} style={btn}>🎲 Randomize Groups</button>
             <button onClick={runTournament} style={{ ...btn, background: THEME.accent3, borderColor: THEME.accent3, color: '#fff' }}>▶️ Run Tournament</button>
           </div>
