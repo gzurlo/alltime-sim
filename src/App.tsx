@@ -164,12 +164,17 @@ export default function App() {
   function shuffle(arr) { const a = arr.slice(); for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 
   function downloadCSV(text, filename) { const blob = new Blob([text], { type: 'text/csv' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = filename; a.click(); URL.revokeObjectURL(url); }
-  function exportMatchesCSV() { const rows = matches.map(m => `${m.round},${m.leg || ''},${m.week},${m.home},${m.homeGoals},${m.awayGoals},${m.away},"${m.summary.replaceAll('"','""')}"`); downloadCSV(`round,leg,week,home,homeGoals,awayGoals,away,summary
-${rows.join('
-')}`, 'matches.csv'); }
-  function exportLeadersCSV() { const rows = leaders.map(l => `${l.Player},${l.Team},${l.Matches},${l.Goals},${l.Assists},${l.Saves},${l.Avg}`); downloadCSV(`Player,Team,Matches,Goals,Assists,Saves,Avg
-${rows.join('
-')}`, 'leaders.csv'); }
+
+  // FIXED: Properly closed template literals for CSV export functions
+  function exportMatchesCSV() { 
+    const rows = matches.map(m => `${m.round},${m.leg || ''},${m.week},${m.home},${m.homeGoals},${m.awayGoals},${m.away},"${m.summary.replaceAll('"','""')}"`); 
+    downloadCSV(`round,leg,week,home,homeGoals,awayGoals,away,summary\n${rows.join('\n')}`, 'matches.csv'); 
+  }
+  
+  function exportLeadersCSV() { 
+    const rows = leaders.map(l => `${l.Player},${l.Team},${l.Matches},${l.Goals},${l.Assists},${l.Saves},${l.Avg}`); 
+    downloadCSV(`Player,Team,Matches,Goals,Assists,Saves,Avg\n${rows.join('\n')}`, 'leaders.csv'); 
+  }
 
   function simulateManual() { const A = teamMap[manualHome], B = teamMap[manualAway]; if (!A || !B) return; const [gA, gB] = simulateScore(A, B, goalEnv, homeAdv); const sum = makeSummary(A, B, gA, gB, undefined, [`${A.stars[0].name}`, `${B.stars[0].name}`]); setManualResult({ score: `${A.name} ${gA}-${gB} ${B.name}`, summary: sum }); }
 
