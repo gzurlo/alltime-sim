@@ -59,7 +59,7 @@ const poisson = (lambda, cap = 7) => { const probs = Array.from({ length: cap + 
 function simulateScore(a, b, goalEnv, homeAdv) { if (!a || !b) return [0, 0]; const sA = a.teamStrength, sB = b.teamStrength; const lamA = Math.max(0.2, goalEnv * ((sA / (sA + sB)) * 2 + homeAdv)); const lamB = Math.max(0.2, goalEnv * ((sB / (sA + sB)) * 2)); return [poisson(lamA), poisson(lamB)]; }
 function starLine(team, goals) { const star = team.stars[Math.floor(Math.random() * team.stars.length)]; const q = star.quality; const expGoals = goals * (0.40 + (q - 85) / 220); let g = Math.max(0, Math.round(normal(expGoals, 0.8))); g = Math.min(g, goals); let a = Math.max(0, Math.round(normal(g * 0.6, 0.8))); const base = 6.2 + (q - 85) / 10; const rating = clamp(normal(base + 0.5 * g + 0.3 * a, 0.6), 5.5, 10); return { who: star.name, goals: g, assists: a, rating: +rating.toFixed(2) }; }
 function keeperSaves(goalsAgainst) { const shots = goalsAgainst + Math.max(0, Math.round(normal(5, 2))); const saves = Math.max(0, shots - goalsAgainst); return saves; }
-function makeSummary(a, b, gA, gB, leg, keys) { const tone = gA === gB ? "couldn’t be split" : Math.abs(gA - gB) === 1 ? "edged it" : gA > gB ? "overpowered" : "dominated"; const leader = gA > gB ? a.name : gB > gA ? b.name : "Both sides"; const legTxt = leg ? ` (Leg ${leg})` : ""; const spice = gA + gB >= 5 ? " A five-goal barnburner lit up the round." : gA + gB <= 1 ? " A cagey tactical duel decided by inches." : ""; const keyStr = keys && keys.length ? ` Key performers: ${keys.join(", ")}.` : ""; const color = Math.random() < 0.5 ? `${leader} pressed high and disrupted build-up.` : `${leader} won the midfield with crisp triangles.`; return `${a.name} vs ${b.name}${legTxt} finished ${gA}-${gB}. ${leader} ${tone} as moments swung the tie. ${color}${spice}${keyStr}`; }
+function makeSummary(a, b, gA, gB, leg, keys) { const tone = gA === gB ? "couldn't be split" : Math.abs(gA - gB) === 1 ? "edged it" : gA > gB ? "overpowered" : "dominated"; const leader = gA > gB ? a.name : gB > gA ? b.name : "Both sides"; const legTxt = leg ? ` (Leg ${leg})` : ""; const spice = gA + gB >= 5 ? " A five-goal barnburner lit up the round." : gA + gB <= 1 ? " A cagey tactical duel decided by inches." : ""; const keyStr = keys && keys.length ? ` Key performers: ${keys.join(", ")}.` : ""; const color = Math.random() < 0.5 ? `${leader} pressed high and disrupted build-up.` : `${leader} won the midfield with crisp triangles.`; return `${a.name} vs ${b.name}${legTxt} finished ${gA}-${gB}. ${leader} ${tone} as moments swung the tie. ${color}${spice}${keyStr}`; }
 function groupSchedule(ts) { if (!ts || ts.length < 4) return []; const [A, B, C, D] = ts; return [ [{ home: A, away: B }, { home: C, away: D }], [{ home: A, away: C }, { home: B, away: D }], [{ home: A, away: D }, { home: B, away: C }] ]; }
 
 export default function App() {
@@ -183,8 +183,8 @@ ${rows.join('
   return (
     <div style={appStyles}>
       <header style={{ textAlign: 'center', marginBottom: 18 }}>
-        <div style={{ fontSize: 30, fontWeight: 900, color: THEME.accent }}>ALL‑TIME CLUB SIMULATOR</div>
-        <div style={{ fontSize: 12, color: THEME.sub }}>R to re‑roll • S to sim • Randomized by design</div>
+        <div style={{ fontSize: 30, fontWeight: 900, color: THEME.accent }}>ALL-TIME CLUB SIMULATOR</div>
+        <div style={{ fontSize: 12, color: THEME.sub }}>R to re-roll • S to sim • Randomized by design</div>
       </header>
 
       <section style={{ ...card, marginBottom: 12 }}>
@@ -202,7 +202,7 @@ ${rows.join('
             <input type="range" min={0} max={0.3} step={0.05} value={homeAdv} onChange={e=>setHomeAdv(parseFloat(e.target.value))} style={{ width: '100%' }} />
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
-            <button onClick={() => { randomizeGroups(); runTournament(); }} style={btnGhost}>Quick Re‑Sim</button>
+            <button onClick={() => { randomizeGroups(); runTournament(); }} style={btnGhost}>Quick Re-Sim</button>
             <button onClick={randomizeGroups} style={btn}>🎲 Randomize Groups</button>
             <button onClick={runTournament} style={{ ...btn, background: THEME.accent3, borderColor: THEME.accent3, color: '#fff' }}>▶️ Run Tournament</button>
           </div>
